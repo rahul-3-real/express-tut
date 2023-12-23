@@ -2,6 +2,10 @@ import User from "../models/user.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/apiError.js";
 import ApiResponse from "../utils/apiResponse.js";
+import {
+  generateAccessAndRefresToken,
+  options,
+} from "../utils/generateTokens.js";
 
 // Register User
 export const registerUser = asyncHandler(async (req, res) => {
@@ -82,10 +86,86 @@ export const registerUser = asyncHandler(async (req, res) => {
 
 // Login User
 export const loginUser = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: "ok" });
+  /**
+   * TODO: Taking details from user
+   * TODO: Finding user
+   * TODO: Password check
+   * TODO: Generating Access & Refresh Token
+   * TODO: Send cookie + response
+   **/
+
+  //* Getting details from user
+  const { email, username, password } = req.body;
+  // if (!email || !username) {
+  //   throw new ApiError(400, "Usermail/Email is required");
+  // }
+  if (!username) {
+    throw new ApiError(400, "Usermail is required");
+  }
+
+  //* Finding User
+  const user = await User.findOne({ $or: [{ email }, { username }] });
+  if (!user) {
+    throw new ApiError(400, "User not found, try signing up!");
+  }
+
+  //* Checking Password
+  const passwordCheck = await user.isPasswordCorrect(password);
+  if (!passwordCheck) {
+    throw new ApiError(401, "Wrong credientials!");
+  }
+
+  console.log("Correct Password");
+
+  //* Generate Token
+  const { accessToken, refreshToken } = await generateAccessAndRefresToken(
+    user._id
+  );
+
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  //* Returning response & cookies
+  res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User loggedin successfully!"
+      )
+    );
 });
 
 // Logout User
 export const logoutUser = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Clearing cookies
+   * TODO: Clearing refresh token from database
+   **/
+
+  //? verifyJWT middleware is set, which finds user, sets refreshToken in DB as undefined
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: { refreshToken: undefined },
+    },
+    { new: true }
+  );
+
+  //* DEMO RESPONSE
+  res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged out"));
+
   res.status(200).json({ message: "ok" });
 });
