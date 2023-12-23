@@ -7,11 +7,17 @@ import {
   generateAccessAndRefresToken,
   options,
 } from "../utils/generateTokens.js";
+import {
+  emailValidation,
+  notEmptyValidation,
+  passwordValidation,
+  usernameValidation,
+} from "../utils/validations.js";
 
 // Register User
 export const registerUser = asyncHandler(async (req, res) => {
   /**
-   * TODO: Getting details from user
+   * TODO: Getting details from frontend
    * TODO: Validating details
    * TODO: Check if user already exists - username, email
    * TODO: Check for images, avatar needed
@@ -24,21 +30,10 @@ export const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, fullname } = req.body;
 
   //* Validating details
-  if (
-    [fullname, email, username, password].some((field) => field?.trim() === "")
-  ) {
-    throw new ApiError(400, "All fields are required");
-  }
-  const usernameRegex = /^[a-zA-Z0-9]+([_\-.][a-zA-Z0-9]+)*$/;
-  if (!usernameRegex.test(username)) {
-    throw new ApiError(
-      400,
-      "Username should only contain alphabets, numbers and (_ - .)"
-    );
-  }
-  if (password.length <= 6) {
-    throw new ApiError(400, "Password length must be minimum 6 characters");
-  }
+  notEmptyValidation([email, username, password]);
+  usernameValidation(username);
+  emailValidation(email);
+  passwordValidation(password);
 
   //* Checking if User exists
   const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -47,8 +42,14 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   //* Checking for files
-  const avatarLocalPath = req.files?.avatar[0]?.path;
-  if (!avatarLocalPath) {
+  let avatarLocalPath;
+  if (
+    req.files &&
+    Array.isArray(req.files.avatar) &&
+    req.files.avatar.length > 0
+  ) {
+    avatarLocalPath = req.files?.avatar[0]?.path;
+  } else {
     throw new ApiError(400, "Please upload profile picture");
   }
 
@@ -88,7 +89,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 // Login User
 export const loginUser = asyncHandler(async (req, res) => {
   /**
-   * TODO: Taking details from user
+   * TODO: Taking details from frontend
    * TODO: Finding user
    * TODO: Password check
    * TODO: Generating Access & Refresh Token
@@ -221,4 +222,130 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(401, error?.message || "Invalid refresh token!");
   }
+});
+
+// Change Current Password
+export const changeCurrentPassword = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Getting details from frontend
+   * TODO: Getting user from cookie
+   * TODO: Compating old password with the user password
+   * TODO: If true, set new password as user password
+   * TODO: Return response
+   * **/
+
+  //* Getting data from user
+  const { oldPassword, newPassword } = req.body;
+
+  //* Getting user from cookie
+  const user = await User.findById(req.user?.id);
+
+  //* Comparing Password
+  const passwordCheck = await user.isPasswordCorrect(oldPassword);
+  if (!passwordCheck) {
+    throw new ApiError(400, "Invalid old password!");
+  }
+
+  //* Setting new password
+  user.password = newPassword;
+  await user.save({ validateBeforeSave: false });
+
+  //* Response
+  res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"));
+});
+
+// Get Current User
+export const getCurrentUser = asyncHandler(async (req, res) => {
+  res.status(200).json(new ApiResponse(200, req.user, "Fetched current user!"));
+});
+
+// Update User Account
+export const updateUserAccount = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Getting details from frontend
+   * TODO: Validating details
+   * TODO: Updating user
+   * **/
+
+  //* Getting details
+  const { username, email, fullname } = req.body;
+
+  //* Validating user
+  notEmptyValidation([email, username]);
+  usernameValidation(username);
+  emailValidation(email);
+
+  //* Checking if username or email already exist
+  const existingUser = await User.findOne({
+    $and: [{ _id: { $ne: req.user?._id } }, { $or: [{ email }, { username }] }],
+  });
+
+  if (existingUser) {
+    throw new ApiError(409, "Email or username is already in use");
+  }
+
+  //* Updating user
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    { $set: { username, email, fullname } },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  //* Response
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
+});
+
+// Update Avatar Image
+export const updateAvatarImage = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Getting file from frontend
+   * TODO: Updating file
+   * **/
+
+  //* Getting file
+  let localPath;
+  if (!req.file) {
+    throw new ApiError(400, "Please upload profile picture");
+  }
+  localPath = req.file?.path;
+
+  console.log(req.file);
+
+  //* Updating file
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    { $set: { avatar: localPath } },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  res.status(200).json(new ApiResponse(200, { user }, "Avatar updated!"));
+});
+
+// Update Cover Image
+export const updateCoverImage = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Getting file from frontend
+   * TODO: Updating file
+   * **/
+
+  //* Getting file
+  let localPath;
+  if (req.file) {
+    localPath = req.file?.path;
+  } else {
+    localPath = "";
+  }
+
+  //* Updating file
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    { $set: { coverImage: localPath } },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  res.status(200).json(new ApiResponse(200, { user }, "Avatar updated!"));
 });
