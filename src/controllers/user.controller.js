@@ -43,9 +43,19 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   //* Checking for files
   const avatarLocalPath = req.files?.avatar[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage[0]?.path || "";
   if (!avatarLocalPath) {
     throw new ApiError(400, "Please upload profile picture");
+  }
+
+  let coverImageLocalPath;
+  if (
+    req.files &&
+    Array.isArray(req.files.coverImage) &&
+    req.files.coverImage.length > 0
+  ) {
+    coverImageLocalPath = req.files.coverImage[0].path;
+  } else {
+    coverImageLocalPath = "";
   }
 
   //* Creating User
