@@ -313,8 +313,6 @@ export const updateAvatarImage = asyncHandler(async (req, res) => {
   }
   localPath = req.file?.path;
 
-  console.log(req.file);
-
   //* Updating file
   const user = await User.findByIdAndUpdate(
     req.user?._id,
@@ -348,4 +346,91 @@ export const updateCoverImage = asyncHandler(async (req, res) => {
   ).select("-password -refreshToken");
 
   res.status(200).json(new ApiResponse(200, { user }, "Avatar updated!"));
+});
+
+// Get User Channel Profile
+export const getUserChannelProfile = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Getting username from url
+   * TODO: Writing pipeline
+   * TODO: Response
+   * **/
+
+  //* Getting username from url
+  const { username } = req.params;
+  if (!username?.trim()) {
+    throw new ApiError(404, "Username not found");
+  }
+
+  //* Writing Pipeline
+  const channel = await User.aggregate([
+    //* Match username with params username
+    {
+      $match: {
+        username: username?.toLowerCase(),
+      },
+    },
+    //* Lookup for getting subscribers
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    //* Lookup for getting subscriberTo
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    //* Adding Field in model (subscribersCount, channelsSubscribedToCount, isSubscribed)
+    {
+      $addFields: {
+        subscribersCount: {
+          $size: "$subscribers",
+        },
+        channelsSubscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        isSubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    //* Project fields (returns information of a selected field/fields)
+    {
+      $project: {
+        fullname: 1,
+        username: 1,
+        email: 1,
+        subscribersCount: 1,
+        channelsSubscribedToCount: 1,
+        isSubscribed: 1,
+        avatar: 1,
+        coverImage: 1,
+      },
+    },
+  ]);
+
+  console.log(channel);
+
+  if (!channel?.length) {
+    throw new ApiError(404, "Channel does not exist!");
+  }
+
+  //* Response
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, channel[0], "User channel fetched successfully")
+    );
 });
