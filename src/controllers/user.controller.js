@@ -13,6 +13,7 @@ import {
   passwordValidation,
   usernameValidation,
 } from "../utils/validations.js";
+import mongoose from "mongoose";
 
 // Register User
 export const registerUser = asyncHandler(async (req, res) => {
@@ -430,5 +431,67 @@ export const getUserChannelProfile = asyncHandler(async (req, res) => {
     .status(200)
     .json(
       new ApiResponse(200, channel[0], "User channel fetched successfully")
+    );
+});
+
+// Get Watch History
+export const getWatchHistory = asyncHandler(async (req, res) => {
+  /**
+   * TODO: Writing aggregation pipeline to fetch watch history
+   * TODO: Response
+   * **/
+
+  //* Aggregation Pipeline
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user?._id),
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    fullname: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  //* Response
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        user[0].watchHistory,
+        "Watch history fetched successfully!"
+      )
     );
 });
